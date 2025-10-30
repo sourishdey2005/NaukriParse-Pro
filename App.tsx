@@ -1,4 +1,4 @@
-import React, { useState, useCallback, Fragment } from 'react';
+import React, { useState, useCallback, Fragment, useRef } from 'react';
 import Header from './components/Header';
 import ScoreGauge from './components/ScoreGauge';
 import AnalysisCard from './components/AnalysisCard';
@@ -7,6 +7,8 @@ import type { AnalysisResult } from './types';
 
 declare var pdfjsLib: any;
 declare var mammoth: any;
+declare var jspdf: any;
+declare var html2canvas: any;
 
 type ActiveTab = 'analysis' | 'coverLetter';
 
@@ -27,6 +29,8 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('analysis');
   const [fileName, setFileName] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
+
+  const analysisContentRef = useRef<HTMLDivElement>(null);
 
   const handleFileChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -124,10 +128,60 @@ const App: React.FC = () => {
     alert('Cover letter copied to clipboard!');
   }
 
+  const handleExportJSON = () => {
+    if (!analysisResult) return;
+    const jsonString = JSON.stringify(analysisResult, null, 2);
+    const blob = new Blob([jsonString], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "NaukriParse_Analysis.json";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportPDF = () => {
+    const input = analysisContentRef.current;
+    if (!input) return;
+
+    html2canvas(input, {
+        scale: 2, // Higher scale for better resolution
+        useCORS: true,
+        backgroundColor: '#ffffff'
+    }).then(canvas => {
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jspdf.jsPDF('p', 'mm', 'a4');
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const canvasWidth = canvas.width;
+        const canvasHeight = canvas.height;
+        const ratio = canvasWidth / canvasHeight;
+        const imgWidth = pdfWidth;
+        const imgHeight = imgWidth / ratio;
+
+        let heightLeft = imgHeight;
+        let position = 0;
+
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pdfHeight;
+
+        while (heightLeft > 0) {
+            position -= pdfHeight;
+            pdf.addPage();
+            pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+            heightLeft -= pdfHeight;
+        }
+
+        pdf.save('NaukriParse_Analysis.pdf');
+    });
+  };
+
   const renderAnalysisContent = () => {
     if (!analysisResult) return null;
     return (
-        <div className="space-y-6 animate-fade-in">
+        <div ref={analysisContentRef} className="space-y-6 bg-white p-4 sm:p-6 rounded-xl shadow-lg border border-slate-100">
              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="md:col-span-1 bg-white p-6 rounded-xl shadow-lg border border-slate-100 flex flex-col items-center justify-center">
                     <ScoreGauge score={analysisResult.matchScore} />
@@ -181,6 +235,31 @@ const App: React.FC = () => {
         </div>
     );
   }
+
+  const renderAnalysisTab = () => {
+    if (!analysisResult) return null;
+    return (
+      <div className="space-y-4 animate-fade-in">
+        <div className="flex items-center justify-end space-x-2">
+          <button
+              onClick={handleExportPDF}
+              className="flex items-center space-x-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-sm py-2 px-3 rounded-lg transition-colors"
+          >
+              <DownloadIcon />
+              <span>Export PDF</span>
+          </button>
+          <button
+              onClick={handleExportJSON}
+              className="flex items-center space-x-2 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 font-semibold text-sm py-2 px-3 rounded-lg transition-colors"
+          >
+              <DownloadIcon />
+              <span>Export JSON</span>
+          </button>
+        </div>
+        {renderAnalysisContent()}
+      </div>
+    );
+  };
 
   const renderCoverLetterContent = () => {
     return (
@@ -337,7 +416,7 @@ const App: React.FC = () => {
                     
                     {/* Tab Content */}
                     <div>
-                        {activeTab === 'analysis' ? renderAnalysisContent() : renderCoverLetterContent()}
+                        {activeTab === 'analysis' ? renderAnalysisTab() : renderCoverLetterContent()}
                     </div>
                  </div>
             )}
@@ -403,5 +482,10 @@ const PencilSquareIcon = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
 );
 
+const DownloadIcon = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+    </svg>
+  );
 
 export default App;
