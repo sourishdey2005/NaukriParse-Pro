@@ -3,7 +3,9 @@ import type { AnalysisResult } from '../types';
 
 // Helper function to initialize the AI client just-in-time
 const getAiClient = () => {
-  const apiKey = process.env.API_KEY;
+  // WARNING: This key is publicly exposed in the frontend code.
+  // It is highly recommended to use a backend proxy or have users provide their own keys.
+  const apiKey = "AIzaSyDOp0hsWrI7FuHLtJx-4ahoHVA55Ovove0";
   if (!apiKey) {
     throw new Error("API key is not configured. Please ensure the API_KEY environment variable is set.");
   }
@@ -110,7 +112,7 @@ export const analyzeResume = async (resumeText: string, jobDescription: string, 
   } catch (error) {
     console.error("Error analyzing resume with Gemini API:", error);
     if (error instanceof Error && error.message.includes("API key")) {
-      throw error;
+      throw new Error("The provided API key is invalid or has been revoked.");
     }
     throw new Error("Failed to analyze resume. The model may have generated an invalid response. Please try again.");
   }
@@ -148,7 +150,7 @@ export const generateCoverLetter = async (resumeText: string, jobDescription: st
   } catch (error) {
     console.error("Error generating cover letter with Gemini API:", error);
     if (error instanceof Error && error.message.includes("API key")) {
-      throw error;
+       throw new Error("The provided API key is invalid or has been revoked.");
     }
     throw new Error("Failed to generate the cover letter. Please try again.");
   }

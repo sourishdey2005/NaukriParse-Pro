@@ -29,9 +29,9 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('analysis');
   const [fileName, setFileName] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
-
+  
   const analysisContentRef = useRef<HTMLDivElement>(null);
-
+  
   const handleFileChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -304,7 +304,7 @@ const App: React.FC = () => {
         </div>
     );
   };
-  
+
   return (
     <div className="min-h-screen bg-slate-50">
       <Header />
