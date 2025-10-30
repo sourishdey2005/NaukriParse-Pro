@@ -23,7 +23,7 @@ const ScoreGauge: React.FC<ScoreGaugeProps> = ({ score }) => {
   };
 
   return (
-    <div className="relative flex items-center justify-center w-48 h-48">
+    <div className="relative flex items-center justify-center w-40 h-40 md:w-48 md:h-48">
       <svg className="w-full h-full" viewBox="0 0 120 120">
         <circle
           className="stroke-slate-200"
@@ -47,7 +47,7 @@ const ScoreGauge: React.FC<ScoreGaugeProps> = ({ score }) => {
         />
       </svg>
       <div className="absolute flex flex-col items-center">
-        <span className={`text-4xl font-bold ${getTextColor(score)}`}>
+        <span className={`text-3xl md:text-4xl font-bold ${getTextColor(score)}`}>
           {score}
         </span>
         <span className="text-sm font-medium text-slate-500">Match Score</span>

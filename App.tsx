@@ -128,11 +128,11 @@ const App: React.FC = () => {
     if (!analysisResult) return null;
     return (
         <div className="space-y-6 animate-fade-in">
-             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-1 bg-white p-6 rounded-xl shadow-lg border border-slate-100 flex flex-col items-center justify-center">
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="md:col-span-1 bg-white p-6 rounded-xl shadow-lg border border-slate-100 flex flex-col items-center justify-center">
                     <ScoreGauge score={analysisResult.matchScore} />
                 </div>
-                <div className="lg:col-span-2">
+                <div className="md:col-span-2">
                     <AnalysisCard title="Suggested Resume Summary" icon={<SparklesIcon />}>
                          <p className="text-slate-600 text-sm leading-relaxed">{analysisResult.suggestedResumeSummary}</p>
                     </AnalysisCard>
@@ -233,7 +233,7 @@ const App: React.FC = () => {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
           {/* Left Column: Inputs */}
-          <div className="lg:col-span-5 bg-white p-6 rounded-2xl shadow-lg border border-slate-200 sticky top-28">
+          <div className="lg:col-span-5 bg-white p-6 rounded-2xl shadow-lg border border-slate-200 lg:sticky top-28">
             <div className="space-y-6">
                <div>
                   <label htmlFor="role-select" className="block text-sm font-semibold text-slate-700 mb-2">Select Your Target Role/Industry</label>
@@ -343,14 +343,14 @@ const App: React.FC = () => {
             )}
 
             {!isLoading && !analysisResult && !error && (
-              <div className="flex flex-col justify-center items-center text-center h-96 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-slate-200 p-8">
-                 <div className="w-20 h-20 rounded-full bg-sky-100 text-sky-500 flex items-center justify-center mb-6">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <div className="flex flex-col justify-center items-center text-center h-auto min-h-[50vh] lg:min-h-0 lg:h-96 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-slate-200 p-6 sm:p-8">
+                 <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-sky-100 text-sky-500 flex items-center justify-center mb-4 sm:mb-6">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 sm:h-10 sm:h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                     </svg>
                  </div>
-                 <h2 className="text-2xl font-bold text-slate-800">Welcome to NaukriParse Pro</h2>
-                 <p className="mt-2 text-slate-500 max-w-md">
+                 <h2 className="text-xl sm:text-2xl font-bold text-slate-800">Welcome to NaukriParse Pro</h2>
+                 <p className="mt-2 text-slate-500 max-w-sm sm:max-w-md">
                     Get an instant, AI-powered analysis of your resume against any job description. Fill in the details on the left to see your match score and get actionable feedback.
                  </p>
               </div>
@@ -360,7 +360,7 @@ const App: React.FC = () => {
 
         </div>
       </main>
-      <footer className="text-center py-4 mt-8 text-sm text-slate-500">
+      <footer className="text-center py-4 mt-12 text-sm text-slate-500">
         Made By Sourish
       </footer>
     </div>
