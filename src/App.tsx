@@ -2,8 +2,10 @@ import React, { useState, useCallback, Fragment } from 'react';
 import Header from './components/Header';
 import ScoreGauge from './components/ScoreGauge';
 import AnalysisCard from './components/AnalysisCard';
-import { analyzeResume, generateCoverLetter } from './services/geminiService';
-import type { AnalysisResult } from './types';
+import QuickActions from './components/QuickActions';
+import Modal from './components/Modal';
+import { analyzeResume, generateCoverLetter, tailorResume, generateInterviewQuestions, generateLinkedInPost } from './services/geminiService';
+import type { AnalysisResult, InterviewPrep } from './types';
 
 declare var pdfjsLib: any;
 declare var mammoth: any;
@@ -28,6 +30,16 @@ const App: React.FC = () => {
   const [fileName, setFileName] = useState<string | null>(null);
   const [isParsing, setIsParsing] = useState(false);
 
+  // State for Quick Actions Modal
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalTitle, setModalTitle] = useState('');
+  const [modalContent, setModalContent] = useState<React.ReactNode>('');
+  const [quickActionLoading, setQuickActionLoading] = useState({
+    tailor: false,
+    interview: false,
+    post: false
+  });
+
   const handleFileChange = useCallback(async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -39,7 +51,6 @@ const App: React.FC = () => {
     setError(null);
 
     try {
-      let text = '';
       if (file.type === 'application/pdf') {
         const reader = new FileReader();
         reader.onload = async (e) => {
@@ -49,9 +60,10 @@ const App: React.FC = () => {
           for (let i = 1; i <= pdf.numPages; i++) {
             const page = await pdf.getPage(i);
             const textContent = await page.getTextContent();
-            content += textContent.items.map((item: any) => item.str).join(' ');
+            content += textContent.items.map((item: any) => item.str).join(' \n');
           }
           setResumeText(content);
+          setIsParsing(false);
         };
         reader.readAsArrayBuffer(file);
       } else if (file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || file.type === 'application/msword') {
@@ -60,17 +72,18 @@ const App: React.FC = () => {
           const arrayBuffer = e.target?.result as ArrayBuffer;
           const result = await mammoth.extractRawText({ arrayBuffer });
           setResumeText(result.value);
+          setIsParsing(false);
         };
         reader.readAsArrayBuffer(file);
       } else {
-        setError('Unsupported file type. Please upload a PDF, DOC, or DOCX file.');
+        setError('Unsupported file type. Please upload a PDF or DOCX file.');
+        setIsParsing(false);
       }
     } catch (err) {
       console.error("Error parsing file:", err);
       setError('Failed to parse the file. Please ensure it is not corrupted.');
-    } finally {
       setIsParsing(false);
-      // Reset file input to allow re-uploading the same file
+    } finally {
       event.target.value = '';
     }
   }, []);
@@ -119,10 +132,93 @@ const App: React.FC = () => {
     }
   };
 
-  const handleCopyCoverLetter = () => {
-    navigator.clipboard.writeText(coverLetter);
-    alert('Cover letter copied to clipboard!');
+  const handleCopyText = (text: string, type: string) => {
+    navigator.clipboard.writeText(text);
+    alert(`${type} copied to clipboard!`);
   }
+
+  // Quick Action Handlers
+  const handleTailorResume = async () => {
+    if (!analysisResult) return;
+    setQuickActionLoading(prev => ({...prev, tailor: true}));
+    try {
+        const tailored = await tailorResume(resumeText, analysisResult);
+        setModalTitle("AI-Tailored Resume");
+        setModalContent(
+            <div className="space-y-4">
+                <p className="text-sm text-slate-600">Here's a revised version of your resume incorporating the AI's suggestions.</p>
+                <div className="prose prose-sm max-w-none text-slate-700 whitespace-pre-wrap border border-slate-200 rounded-lg p-4 bg-slate-50">
+                    {tailored}
+                </div>
+                <button onClick={() => handleCopyText(tailored, 'Resume')} className="mt-4 w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Copy Resume Text</button>
+            </div>
+        );
+        setIsModalOpen(true);
+    } catch (err: any) {
+        setError(err.message);
+    } finally {
+        setQuickActionLoading(prev => ({...prev, tailor: false}));
+    }
+  };
+
+  const handlePrepareInterview = async () => {
+     if (!analysisResult) return;
+    setQuickActionLoading(prev => ({...prev, interview: true}));
+    try {
+        const prep: InterviewPrep = await generateInterviewQuestions(resumeText, jobDescription, selectedRole);
+        setModalTitle("Interview Preparation");
+        const contentString = `Behavioral Questions:\n\n${prep.behavioralQuestions.map(q => `Q: ${q.question}\nA: ${q.suggestedAnswer}`).join('\n\n')}\n\nTechnical Questions:\n\n${prep.technicalQuestions.map(q => `Q: ${q.question}\nA: ${q.suggestedAnswer}`).join('\n\n')}`;
+        setModalContent(
+             <div className="space-y-4">
+                <div className="prose prose-sm max-w-none text-slate-800">
+                    <h4>Behavioral Questions</h4>
+                    {prep.behavioralQuestions.map((q, i) => (
+                        <div key={`beh-${i}`} className="mt-4 p-3 bg-slate-50 rounded-lg border">
+                            <p><strong>Q: {q.question}</strong></p>
+                            <p>{q.suggestedAnswer}</p>
+                        </div>
+                    ))}
+                     <h4 className="mt-6">Technical Questions</h4>
+                    {prep.technicalQuestions.map((q, i) => (
+                        <div key={`tech-${i}`} className="mt-4 p-3 bg-slate-50 rounded-lg border">
+                            <p><strong>Q: {q.question}</strong></p>
+                            <p>{q.suggestedAnswer}</p>
+                        </div>
+                    ))}
+                </div>
+                <button onClick={() => handleCopyText(contentString, 'Interview Prep')} className="mt-4 w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Copy All Questions & Answers</button>
+            </div>
+        );
+        setIsModalOpen(true);
+    } catch (err: any) {
+        setError(err.message);
+    } finally {
+        setQuickActionLoading(prev => ({...prev, interview: false}));
+    }
+  };
+
+  const handleDraftPost = async () => {
+    if (!analysisResult) return;
+    setQuickActionLoading(prev => ({...prev, post: true}));
+    try {
+        const post = await generateLinkedInPost(resumeText, jobDescription);
+        setModalTitle("Draft LinkedIn Post");
+        setModalContent(
+             <div className="space-y-4">
+                <p className="text-sm text-slate-600">A professional post to share on your LinkedIn profile.</p>
+                <div className="prose prose-sm max-w-none text-slate-700 whitespace-pre-wrap border border-slate-200 rounded-lg p-4 bg-slate-50">
+                    {post}
+                </div>
+                <button onClick={() => handleCopyText(post, 'Post')} className="mt-4 w-full bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors">Copy Post Text</button>
+            </div>
+        );
+        setIsModalOpen(true);
+    } catch (err: any) {
+        setError(err.message);
+    } finally {
+        setQuickActionLoading(prev => ({...prev, post: false}));
+    }
+  };
 
   const renderAnalysisContent = () => {
     if (!analysisResult) return null;
@@ -139,6 +235,13 @@ const App: React.FC = () => {
                 </div>
             </div>
 
+            <QuickActions 
+                onTailorResume={handleTailorResume}
+                onPrepareInterview={handlePrepareInterview}
+                onDraftPost={handleDraftPost}
+                isLoading={quickActionLoading}
+            />
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                  <AnalysisCard title="Strengths" icon={<CheckCircleIcon />}>
                     <ul className="list-disc list-inside space-y-2 text-slate-600 text-sm">
@@ -154,11 +257,17 @@ const App: React.FC = () => {
                     <div className="text-sm">
                         <h4 className="font-semibold text-emerald-600 mb-2">Matched Keywords</h4>
                         <div className="flex flex-wrap gap-2 mb-4">
-                            {analysisResult.keywordAnalysis.matchedKeywords.map((kw, i) => <span key={i} className="bg-emerald-100 text-emerald-800 text-xs font-medium px-2.5 py-0.5 rounded-full">{kw}</span>)}
+                            {analysisResult.keywordAnalysis.matchedKeywords.length > 0 ? 
+                                analysisResult.keywordAnalysis.matchedKeywords.map((kw, i) => <span key={i} className="bg-emerald-100 text-emerald-800 text-xs font-medium px-2.5 py-0.5 rounded-full">{kw}</span>)
+                                : <p className="text-slate-500">No strong matches found.</p>
+                            }
                         </div>
                          <h4 className="font-semibold text-red-600 mb-2">Missing Keywords</h4>
                         <div className="flex flex-wrap gap-2">
-                            {analysisResult.keywordAnalysis.missingKeywords.map((kw, i) => <span key={i} className="bg-red-100 text-red-800 text-xs font-medium px-2.5 py-0.5 rounded-full">{kw}</span>)}
+                             {analysisResult.keywordAnalysis.missingKeywords.length > 0 ?
+                                analysisResult.keywordAnalysis.missingKeywords.map((kw, i) => <span key={i} className="bg-red-100 text-red-800 text-xs font-medium px-2.5 py-0.5 rounded-full">{kw}</span>)
+                                : <p className="text-slate-500">No critical keywords missing.</p>
+                             }
                         </div>
                     </div>
                 </AnalysisCard>
@@ -214,7 +323,7 @@ const App: React.FC = () => {
                  <div className="bg-white p-6 rounded-xl shadow-lg border border-slate-100">
                     <div className="flex justify-between items-center mb-4">
                         <h4 className="text-lg font-semibold text-gray-800">Generated Cover Letter</h4>
-                        <button onClick={handleCopyCoverLetter} className="text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-1 px-3 rounded-lg transition-colors">Copy</button>
+                        <button onClick={() => handleCopyText(coverLetter, 'Cover letter')} className="text-sm bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-1 px-3 rounded-lg transition-colors">Copy</button>
                     </div>
                     <div className="prose prose-sm max-w-none text-slate-700 whitespace-pre-wrap border border-slate-200 rounded-lg p-4 bg-slate-50 max-h-96 overflow-y-auto">
                         {coverLetter}
@@ -232,7 +341,6 @@ const App: React.FC = () => {
       <main className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
           
-          {/* Left Column: Inputs */}
           <div className="lg:col-span-5 bg-white p-6 rounded-2xl shadow-lg border border-slate-200 lg:sticky top-28">
             <div className="space-y-6">
                <div>
@@ -259,9 +367,9 @@ const App: React.FC = () => {
                         <p className="mt-1 text-sm text-slate-600">
                             <span className="font-semibold text-indigo-600">Upload a file</span> or paste content below
                         </p>
-                        <p className="text-xs text-slate-500">PDF, DOC, DOCX up to 10MB</p>
+                        <p className="text-xs text-slate-500">PDF, DOCX supported</p>
                     </div>
-                     <input id="file-upload" name="file-upload" type="file" className="file-input-hidden" onChange={handleFileChange} accept=".pdf,.doc,.docx" />
+                     <input id="file-upload" name="file-upload" type="file" className="file-input-hidden" onChange={handleFileChange} accept=".pdf,.docx" />
                   </label>
                   
                   {fileName && (
@@ -297,15 +405,14 @@ const App: React.FC = () => {
 
               <button
                 onClick={handleAnalyze}
-                disabled={isLoading}
+                disabled={isLoading || isParsing}
                 className="w-full bg-sky-500 text-white font-semibold py-3 px-4 rounded-lg hover:bg-sky-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-sky-500 disabled:bg-sky-300 transition-all transform hover:scale-105"
               >
-                {isLoading ? 'Analyzing...' : 'Analyze My Resume'}
+                {isLoading ? 'Analyzing...' : (isParsing ? 'Parsing File...' : 'Analyze My Resume')}
               </button>
             </div>
           </div>
 
-          {/* Right Column: Results */}
           <div className="lg:col-span-7">
             {isLoading && (
               <div className="flex justify-center items-center h-96 bg-white rounded-2xl shadow-lg border border-slate-200">
@@ -315,11 +422,10 @@ const App: React.FC = () => {
                   </div>
               </div>
             )}
-            {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg" role="alert">{error}</div>}
+            {error && <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded-lg my-4" role="alert">{error}</div>}
             
-            {analysisResult && (
+            {analysisResult && !isLoading && (
                  <div className="space-y-6">
-                    {/* Tabs */}
                     <div className="bg-white rounded-xl p-1.5 shadow-md border border-slate-200 flex space-x-2">
                         <button 
                             onClick={() => setActiveTab('analysis')}
@@ -335,14 +441,13 @@ const App: React.FC = () => {
                         </button>
                     </div>
                     
-                    {/* Tab Content */}
                     <div>
                         {activeTab === 'analysis' ? renderAnalysisContent() : renderCoverLetterContent()}
                     </div>
                  </div>
             )}
 
-            {!isLoading && !analysisResult && !error && (
+            {!isLoading && !analysisResult && (
               <div className="flex flex-col justify-center items-center text-center h-auto min-h-[50vh] lg:min-h-0 lg:h-96 bg-white/80 backdrop-blur-sm rounded-2xl shadow-lg border border-slate-200 p-6 sm:p-8">
                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-sky-100 text-sky-500 flex items-center justify-center mb-4 sm:mb-6">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 sm:h-10 sm:h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -357,9 +462,11 @@ const App: React.FC = () => {
             )}
 
           </div>
-
         </div>
       </main>
+      <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={modalTitle}>
+        {modalContent}
+      </Modal>
       <footer className="text-center py-4 mt-12 text-sm text-slate-500">
         Made By Sourish
       </footer>

@@ -1,10 +1,12 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import type { AnalysisResult } from '../types';
+import type { AnalysisResult, InterviewPrep } from '../types';
 
 // Helper function to initialize the AI client just-in-time
 const getAiClient = () => {
+  // FIX: Use process.env.API_KEY as per the guidelines to retrieve the API key.
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
+    // FIX: Update the error message to reflect the correct environment variable name.
     throw new Error("API key is not configured. Please ensure the API_KEY environment variable is set.");
   }
   return new GoogleGenAI({ apiKey });
@@ -66,6 +68,38 @@ const getAnalysisSchema = () => ({
   required: ["matchScore", "strengths", "areasForImprovement", "actionVerbs", "quantification", "clarityAndConciseness", "keywordAnalysis", "suggestedResumeSummary"],
 });
 
+const getInterviewPrepSchema = () => ({
+    type: Type.OBJECT,
+    properties: {
+        behavioralQuestions: {
+            type: Type.ARRAY,
+            description: "A list of behavioral interview questions.",
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    question: { type: Type.STRING },
+                    suggestedAnswer: { type: Type.STRING, description: "A detailed sample answer using the STAR method based on the candidate's resume." }
+                },
+                required: ["question", "suggestedAnswer"]
+            }
+        },
+        technicalQuestions: {
+            type: Type.ARRAY,
+            description: "A list of technical or role-specific interview questions.",
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    question: { type: Type.STRING },
+                    suggestedAnswer: { type: Type.STRING, description: "A detailed sample answer based on the candidate's resume and best practices." }
+                },
+                required: ["question", "suggestedAnswer"]
+            }
+        }
+    },
+    required: ["behavioralQuestions", "technicalQuestions"]
+});
+
+
 export const analyzeResume = async (resumeText: string, jobDescription: string, role: string): Promise<AnalysisResult> => {
   try {
     const ai = getAiClient();
@@ -93,7 +127,7 @@ export const analyzeResume = async (resumeText: string, jobDescription: string, 
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-pro",
-      contents: prompt,
+      contents: {role: 'user', parts: [{text: prompt}]},
       config: {
         responseMimeType: "application/json",
         responseSchema: getAnalysisSchema(),
@@ -137,7 +171,7 @@ export const generateCoverLetter = async (resumeText: string, jobDescription: st
 
     const response = await ai.models.generateContent({
         model: "gemini-2.5-pro",
-        contents: prompt,
+        contents: {role: 'user', parts: [{text: prompt}]},
         config: {
           systemInstruction: systemInstruction,
           temperature: 0.5,
@@ -152,4 +186,118 @@ export const generateCoverLetter = async (resumeText: string, jobDescription: st
     }
     throw new Error("Failed to generate the cover letter. Please try again.");
   }
+};
+
+export const tailorResume = async (resumeText: string, analysis: AnalysisResult): Promise<string> => {
+    const ai = getAiClient();
+    const prompt = `
+    You are an expert resume writer and career coach. Your task is to revise and enhance the provided resume based on a detailed analysis.
+    Incorporate the feedback to make the resume stronger and more aligned with the target job.
+    
+    **Instructions:**
+    1.  Start with the 'Original Resume'.
+    2.  Rewrite the professional summary using the 'Suggested Resume Summary'.
+    3.  Integrate the 'Missing Keywords' naturally throughout the resume, especially in the experience and skills sections.
+    4.  Refine the experience section by applying the feedback from 'Areas for Improvement', 'Action Verbs', and 'Quantification'. Make bullet points more impactful.
+    5.  Ensure the final resume is clear, concise, and professionally formatted.
+    6.  Return only the full text of the revised resume. Do not include any of your own commentary or headings like "Revised Resume".
+
+    **Analysis Feedback:**
+    ${JSON.stringify({
+        suggestedResumeSummary: analysis.suggestedResumeSummary,
+        areasForImprovement: analysis.areasForImprovement,
+        keywordAnalysis: analysis.keywordAnalysis,
+        actionVerbs: analysis.actionVerbs,
+        quantification: analysis.quantification,
+    }, null, 2)}
+
+    **Original Resume:**
+    ${resumeText}
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-pro",
+            contents: {role: 'user', parts: [{text: prompt}]},
+            config: {
+                temperature: 0.4,
+            }
+        });
+        return response.text;
+    } catch (error) {
+        console.error("Error tailoring resume with Gemini API:", error);
+        throw new Error("Failed to tailor the resume. Please try again.");
+    }
+};
+
+export const generateInterviewQuestions = async (resumeText: string, jobDescription: string, role: string): Promise<InterviewPrep> => {
+    const ai = getAiClient();
+    const prompt = `
+    **Role:** You are an expert hiring manager and career coach for the **${role}** field.
+
+    **Task:** Based on the candidate's resume and the target job description, generate a list of likely interview questions.
+    - Create 3-4 behavioral questions.
+    - Create 2-3 technical or role-specific questions.
+    - For each question, provide a strong, detailed sample answer using the STAR method (Situation, Task, Action, Result) where applicable, drawing specifics from the provided resume.
+    - The answers should be from the perspective of the candidate.
+
+    **Candidate's Resume:**
+    ${resumeText}
+
+    **Job Description:**
+    ${jobDescription}
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-pro",
+            contents: {role: 'user', parts: [{text: prompt}]},
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: getInterviewPrepSchema(),
+                temperature: 0.5,
+            }
+        });
+        const jsonText = response.text.trim();
+        return JSON.parse(jsonText);
+    } catch (error) {
+        console.error("Error generating interview questions with Gemini API:", error);
+        throw new Error("Failed to generate interview questions. The model may have returned an invalid format.");
+    }
+};
+
+export const generateLinkedInPost = async (resumeText: string, jobDescription: string): Promise<string> => {
+    const ai = getAiClient();
+    const prompt = `
+    You are a professional branding expert. Your task is to write a short, engaging, and professional LinkedIn post (under 300 characters).
+    
+    **Instructions:**
+    1.  The post is for a candidate who has just applied for a job.
+    2.  Infer the Job Title and Company Name from the job description.
+    3.  The post should express excitement about the opportunity.
+    4.  It must highlight one key skill or achievement from the resume that is highly relevant to the job description.
+    5.  The tone should be professional and confident.
+    6.  Do not use hashtags.
+    7.  Return only the text of the post.
+
+    **Resume:**
+    ${resumeText}
+
+    **Job Description:**
+    ${jobDescription}
+    `;
+
+    try {
+        const response = await ai.models.generateContent({
+            model: "gemini-2.5-flash",
+            contents: {role: 'user', parts: [{text: prompt}]},
+            config: {
+                temperature: 0.6,
+            }
+        });
+        return response.text;
+    } catch (error) {
+        console.error("Error generating LinkedIn post with Gemini API:", error);
+        throw new Error("Failed to generate the LinkedIn post. Please try again.");
+    }
 };

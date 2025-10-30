@@ -13,3 +13,13 @@ export interface AnalysisResult {
   keywordAnalysis: KeywordAnalysis;
   suggestedResumeSummary: string;
 }
+
+export interface InterviewQuestion {
+  question: string;
+  suggestedAnswer: string;
+}
+
+export interface InterviewPrep {
+  behavioralQuestions: InterviewQuestion[];
+  technicalQuestions: InterviewQuestion[];
+}
