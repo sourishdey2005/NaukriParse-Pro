@@ -1,0 +1,5 @@
+{
+  "name": "NaukriParse",
+  "description": "An AI-powered ATS resume analyzer that scores your resume against a job description and provides actionable feedback for improvement using the Gemini API.",
+  "requestFramePermissions": []
+}
